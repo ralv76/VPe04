@@ -33,11 +33,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lowercase image name
+        id: image
+        run: |
+          IMAGE_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_name=${IMAGE_LOWER}" >> $GITHUB_OUTPUT
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.image.outputs.image_name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -74,25 +80,29 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT }}
           script: |
-            # Останавливаем и удаляем старый контейнер
-            docker stop time-server || true
-            docker rm time-server || true
+            # Преобразуем имя образа в lowercase (Docker требует lowercase)
+            IMAGE_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+            IMAGE="${{ env.REGISTRY }}/${IMAGE_LOWER}:latest"
             
-            # Удаляем старый образ
-            docker rmi ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || true
+            # Останавливаем и удаляем старый контейнер (игнорируем ошибки если контейнер не существует)
+            docker stop time-server 2>/dev/null || true
+            docker rm time-server 2>/dev/null || true
+            
+            # Удаляем старый образ (игнорируем ошибки если образ не существует)
+            docker rmi $IMAGE 2>/dev/null || true
             
             # Логинимся в GitHub Container Registry
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
             
             # Скачиваем новый образ
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            docker pull $IMAGE
             
             # Запускаем новый контейнер
             docker run -d \
               --name time-server \
               --restart unless-stopped \
               -p 8000:8000 \
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+              $IMAGE
             
             # Очистка старых образов (опционально)
             docker image prune -f
