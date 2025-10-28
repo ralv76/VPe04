@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from datetime import datetime
 import uvicorn
 
-app = FastAPI(title="Time Server API", description="Простой API для получения текущего времени сервера")
+app = FastAPI(title="Time Server API ver2dev", description="Простой API для получения текущего времени сервера")
 
 @app.get("/")
 async def root():
